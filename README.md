@@ -21,7 +21,7 @@ An advanced Model Context Protocol (MCP) server that enables structured sequenti
 ### Quick Setup
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/spideynolove/sequential-thinking-mcp.git
 cd sequential-thinking-mcp
 uv sync
 ```
