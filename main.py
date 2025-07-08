@@ -2,6 +2,9 @@
 
 import json
 import uuid
+import subprocess
+import os
+import re
 import asyncio
 import weakref
 from typing import Dict, List, Optional, Any, Set, Protocol, Union
@@ -20,6 +23,36 @@ class PatternResult:
     strategy: str = "keyword"
 
 @dataclass
+class PackageInfo:
+    name: str
+    version: str
+    description: str
+    installed: bool = False
+    relevance_score: float = 0.0
+    integration_examples: List[str] = None
+    api_methods: List[str] = None
+    
+    def __post_init__(self):
+        if self.integration_examples is None:
+            self.integration_examples = []
+        if self.api_methods is None:
+            self.api_methods = []
+
+@dataclass
+class ArchitectureDecision:
+    id: str
+    title: str
+    context: str
+    options_considered: List[str]
+    chosen_option: str
+    rationale: str
+    consequences: str
+    package_dependencies: List[str]
+    thinking_session_id: str
+    timestamp: str
+    status: str = "active"  # active, superseded, deprecated
+
+@dataclass
 class Thought:
     id: str
     content: str
@@ -34,12 +67,19 @@ class Thought:
     is_checkpoint: bool = False
     tags: List[str] = None
     pattern_results: List[PatternResult] = None
+    packages_explored: List[PackageInfo] = None
+    architecture_decisions: List[str] = None
+    coding_context: bool = False
 
     def __post_init__(self):
         if self.tags is None:
             self.tags = []
         if self.pattern_results is None:
             self.pattern_results = []
+        if self.packages_explored is None:
+            self.packages_explored = []
+        if self.architecture_decisions is None:
+            self.architecture_decisions = []
 
 @dataclass
 class Branch:
@@ -72,10 +112,18 @@ class ThinkingSession:
     last_updated: str
     config: SessionConfig = None
     memory_usage: int = 0
+    coding_session: bool = False
+    package_registry: Dict[str, PackageInfo] = None
+    architecture_decisions: Dict[str, ArchitectureDecision] = None
+    codebase_context: Optional[str] = None
     
     def __post_init__(self):
         if self.config is None:
             self.config = SessionConfig()
+        if self.package_registry is None:
+            self.package_registry = {}
+        if self.architecture_decisions is None:
+            self.architecture_decisions = {}
 
 class PatternDetector(Protocol):
     def detect_patterns(self, content: str) -> List[PatternResult]:
@@ -141,13 +189,327 @@ class FallbackPatternDetector:
             ))
         return results
 
+class CodingPatternDetector:
+    def __init__(self):
+        self.coding_patterns = {
+            "package_needed": ["import", "install", "dependency", "library", "framework"],
+            "api_exploration": ["api", "method", "function", "endpoint", "interface"],
+            "code_reinvention": ["implement", "write", "create", "build", "develop"],
+            "integration_planning": ["integrate", "connect", "combine", "merge", "link"],
+            "architecture_decision": ["choose", "select", "decide", "architecture", "design"]
+        }
+    
+    def detect_patterns(self, content: str) -> List[PatternResult]:
+        results = []
+        content_lower = content.lower()
+        
+        for pattern_name, keywords in self.coding_patterns.items():
+            confidence = 0.0
+            matched_keywords = []
+            
+            for keyword in keywords:
+                if keyword in content_lower:
+                    confidence = max(confidence, 0.7)
+                    matched_keywords.append(keyword)
+            
+            if confidence > 0:
+                results.append(PatternResult(
+                    pattern=pattern_name,
+                    confidence=confidence + (0.1 * len(matched_keywords)),
+                    strategy="coding_keyword"
+                ))
+        
+        return results
+
+class PackageDiscoveryEngine:
+    def __init__(self):
+        self.package_cache: Dict[str, List[PackageInfo]] = {}
+        self.discovery_sources = ["pip", "conda", "local"]
+    
+    def discover_packages(self, task_description: str, language: str = "python") -> List[PackageInfo]:
+        cache_key = f"{task_description}:{language}"
+        if cache_key in self.package_cache:
+            return self.package_cache[cache_key]
+        
+        packages = []
+        
+        # Search installed packages
+        packages.extend(self._search_installed_packages(task_description))
+        
+        # Search PyPI for Python packages
+        if language == "python":
+            packages.extend(self._search_pypi(task_description))
+        
+        # Rank packages by relevance
+        ranked_packages = self._rank_packages(packages, task_description)
+        
+        self.package_cache[cache_key] = ranked_packages
+        return ranked_packages
+    
+    def _search_installed_packages(self, task_description: str) -> List[PackageInfo]:
+        packages = []
+        keywords = task_description.lower().split()
+        
+        try:
+            result = subprocess.run(["pip", "list", "--format=json"], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                installed_packages = json.loads(result.stdout)
+                for pkg in installed_packages:
+                    relevance = self._calculate_relevance(pkg["name"], keywords)
+                    if relevance > 0.3:
+                        packages.append(PackageInfo(
+                            name=pkg["name"],
+                            version=pkg["version"],
+                            description=f"Installed package: {pkg['name']}",
+                            installed=True,
+                            relevance_score=relevance
+                        ))
+        except (subprocess.TimeoutExpired, json.JSONDecodeError):
+            pass
+        
+        return packages
+    
+    def _search_pypi(self, task_description: str) -> List[PackageInfo]:
+        # Simplified PyPI search - in production, use PyPI API
+        common_packages = {
+            "requests": "HTTP library for Python",
+            "pandas": "Data manipulation and analysis library",
+            "numpy": "Numerical computing library",
+            "matplotlib": "Plotting library",
+            "flask": "Web framework",
+            "django": "Web framework",
+            "pytest": "Testing framework",
+            "sqlalchemy": "Database toolkit",
+            "scikit-learn": "Machine learning library",
+            "tensorflow": "Machine learning framework"
+        }
+        
+        packages = []
+        keywords = task_description.lower().split()
+        
+        for name, desc in common_packages.items():
+            relevance = self._calculate_relevance(name + " " + desc, keywords)
+            if relevance > 0.2:
+                packages.append(PackageInfo(
+                    name=name,
+                    version="latest",
+                    description=desc,
+                    installed=False,
+                    relevance_score=relevance
+                ))
+        
+        return packages
+    
+    def _calculate_relevance(self, text: str, keywords: List[str]) -> float:
+        text_lower = text.lower()
+        matches = sum(1 for keyword in keywords if keyword in text_lower)
+        return matches / len(keywords) if keywords else 0.0
+    
+    def _rank_packages(self, packages: List[PackageInfo], task_description: str) -> List[PackageInfo]:
+        # Sort by relevance score (descending) and prefer installed packages
+        def sort_key(pkg: PackageInfo) -> tuple:
+            return (-pkg.relevance_score, not pkg.installed)
+        
+        return sorted(packages, key=sort_key)
+
+class ArchitectureDecisionTracker:
+    def __init__(self):
+        self.decisions: Dict[str, ArchitectureDecision] = {}
+    
+    def record_decision(
+        self,
+        title: str,
+        context: str,
+        options_considered: List[str],
+        chosen_option: str,
+        rationale: str,
+        consequences: str,
+        package_dependencies: List[str],
+        thinking_session_id: str
+    ) -> str:
+        decision_id = str(uuid.uuid4())[:8]
+        
+        decision = ArchitectureDecision(
+            id=decision_id,
+            title=title,
+            context=context,
+            options_considered=options_considered,
+            chosen_option=chosen_option,
+            rationale=rationale,
+            consequences=consequences,
+            package_dependencies=package_dependencies,
+            thinking_session_id=thinking_session_id,
+            timestamp=datetime.now().isoformat()
+        )
+        
+        self.decisions[decision_id] = decision
+        return decision_id
+    
+    def query_similar_decisions(
+        self,
+        technology: str = "",
+        pattern: str = "",
+        package: str = "",
+        similarity_threshold: float = 0.7
+    ) -> List[ArchitectureDecision]:
+        similar_decisions = []
+        search_terms = [technology, pattern, package]
+        search_text = " ".join(term for term in search_terms if term).lower()
+        
+        for decision in self.decisions.values():
+            decision_text = (decision.title + " " + decision.context + " " + 
+                           decision.chosen_option + " " + decision.rationale).lower()
+            
+            if search_text and search_text in decision_text:
+                similar_decisions.append(decision)
+        
+        return similar_decisions
+
+class CodingWorkflowEngine:
+    def __init__(self, thinking_engine: 'SequentialThinkingEngine'):
+        self.thinking_engine = thinking_engine
+        self.package_discovery = PackageDiscoveryEngine()
+        self.architecture_tracker = ArchitectureDecisionTracker()
+        self.coding_patterns = CodingPatternDetector()
+        self.reinvention_detector = CodeReinventionDetector()
+        
+        # Register coding pattern detector
+        thinking_engine.plugin_manager.register_pattern_detector(self.coding_patterns)
+    
+    def start_coding_session(
+        self,
+        problem: str,
+        success_criteria: str,
+        constraints: List[str],
+        codebase_context: str = "",
+        package_exploration_required: bool = True
+    ) -> str:
+        # Create enhanced thinking session for coding
+        session_id = self.thinking_engine.start_session(problem, success_criteria, constraints)
+        session = self.thinking_engine.session_manager.get_session(session_id)
+        
+        if session:
+            session.coding_session = True
+            session.codebase_context = codebase_context
+            
+            # Force package discovery as first step if required
+            if package_exploration_required:
+                asyncio.create_task(self._add_package_discovery_thought(session_id, problem))
+        
+        return session_id
+    
+    async def _add_package_discovery_thought(self, session_id: str, problem: str):
+        # Add mandatory package discovery thought
+        original_session = self.thinking_engine.current_session
+        self.thinking_engine.current_session = session_id
+        
+        try:
+            await self.thinking_engine.add_thought(
+                content=f"MANDATORY: Explore existing packages for: {problem}",
+                confidence=0.9
+            )
+        finally:
+            self.thinking_engine.current_session = original_session
+    
+    def explore_packages(
+        self,
+        task_description: str,
+        language: str = "python",
+        thinking_session_id: str = ""
+    ) -> List[PackageInfo]:
+        packages = self.package_discovery.discover_packages(task_description, language)
+        
+        # Store results in thinking session if provided
+        if thinking_session_id:
+            session = self.thinking_engine.session_manager.get_session(thinking_session_id)
+            if session:
+                for package in packages:
+                    session.package_registry[package.name] = package
+        
+        return packages
+    
+    def record_architecture_decision(
+        self,
+        title: str,
+        context: str,
+        options_considered: List[str],
+        chosen_option: str,
+        rationale: str,
+        consequences: str,
+        package_dependencies: List[str],
+        thinking_session_id: str
+    ) -> str:
+        decision_id = self.architecture_tracker.record_decision(
+            title, context, options_considered, chosen_option,
+            rationale, consequences, package_dependencies, thinking_session_id
+        )
+        
+        # Store in thinking session
+        session = self.thinking_engine.session_manager.get_session(thinking_session_id)
+        if session:
+            session.architecture_decisions[decision_id] = self.architecture_tracker.decisions[decision_id]
+        
+        return decision_id
+    
+    def detect_code_reinvention(
+        self,
+        proposed_code: str,
+        existing_packages_checked: List[str],
+        confidence_threshold: float = 0.8
+    ) -> Dict[str, Any]:
+        return self.reinvention_detector.detect_reinvention(
+            proposed_code, existing_packages_checked, confidence_threshold
+        )
+
+class CodeReinventionDetector:
+    def __init__(self):
+        self.common_functionality_patterns = {
+            "http_requests": ["http", "request", "get", "post", "api", "curl"],
+            "data_processing": ["csv", "json", "xml", "parse", "dataframe"],
+            "database": ["sql", "database", "query", "orm", "connection"],
+            "testing": ["test", "assert", "mock", "unittest", "pytest"],
+            "web_framework": ["server", "route", "middleware", "template", "framework"],
+            "authentication": ["auth", "login", "token", "jwt", "session", "password"],
+            "logging": ["log", "debug", "info", "error", "warning"],
+            "datetime": ["date", "time", "datetime", "timestamp", "timezone"]
+        }
+    
+    def detect_reinvention(
+        self,
+        proposed_code: str,
+        existing_packages_checked: List[str],
+        confidence_threshold: float = 0.8
+    ) -> Dict[str, Any]:
+        proposed_lower = proposed_code.lower()
+        potential_reinvention = []
+        
+        for functionality, keywords in self.common_functionality_patterns.items():
+            matches = sum(1 for keyword in keywords if keyword in proposed_lower)
+            confidence = matches / len(keywords) if keywords else 0.0
+            
+            if confidence >= confidence_threshold:
+                potential_reinvention.append({
+                    "functionality": functionality,
+                    "confidence": confidence,
+                    "keywords_matched": [kw for kw in keywords if kw in proposed_lower]
+                })
+        
+        return {
+            "is_potential_reinvention": len(potential_reinvention) > 0,
+            "confidence_score": max([pr["confidence"] for pr in potential_reinvention], default=0.0),
+            "detected_patterns": potential_reinvention,
+            "packages_checked": existing_packages_checked,
+            "recommendation": "Explore existing packages before implementing" if potential_reinvention else "Implementation appears novel"
+        }
+
 class SessionManager:
     def __init__(self):
         self.sessions: Dict[str, ThinkingSession] = {}
         self.session_refs: Dict[str, weakref.ref] = {}
         self.executor = ThreadPoolExecutor(max_workers=4)
     
-    def create_session(self, problem: str, criteria: str, constraints: List[str]) -> str:
+    def create_session(self, problem: str, criteria: str, constraints: List[str], coding_session: bool = False) -> str:
         session_id = str(uuid.uuid4())[:8]
         now = datetime.now().isoformat()
         
@@ -160,7 +522,8 @@ class SessionManager:
             branches={},
             patterns=[],
             started=now,
-            last_updated=now
+            last_updated=now,
+            coding_session=coding_session
         )
         
         self.sessions[session_id] = session
@@ -227,13 +590,17 @@ class SequentialThinkingEngine:
         self.plugin_manager.register_pattern_detector(KeywordPatternDetector())
         self.plugin_manager.register_pattern_detector(FallbackPatternDetector())
         
-    def start_session(self, problem: str, criteria: str, constraints: List[str]) -> str:
-        session_id = self.session_manager.create_session(problem, criteria, constraints)
+        # Initialize CodingWorkflowEngine
+        self.coding_workflow = CodingWorkflowEngine(self)
+        
+    def start_session(self, problem: str, criteria: str, constraints: List[str], coding_session: bool = False) -> str:
+        session_id = self.session_manager.create_session(problem, criteria, constraints, coding_session)
         self.current_session = session_id
         return session_id
     
     async def add_thought(self, content: str, dependencies: List[str] = None, 
-                          confidence: float = 0.8, branch_id: Optional[str] = None) -> str:
+                          confidence: float = 0.8, branch_id: Optional[str] = None, 
+                          coding_context: bool = False, packages_explored: List[PackageInfo] = None) -> str:
         if not self.current_session:
             raise ValueError("No active session")
         
@@ -253,6 +620,7 @@ class SequentialThinkingEngine:
         contradictions = await self._detect_contradictions_async(content, dependencies or [])
         pattern_results = self.plugin_manager.get_pattern_results(content)
         
+        # Enhanced thought with coding context
         thought = Thought(
             id=thought_id,
             content=content,
@@ -263,7 +631,9 @@ class SequentialThinkingEngine:
             contradictions=contradictions,
             confidence=confidence,
             branch_id=branch_id,
-            pattern_results=pattern_results
+            pattern_results=pattern_results,
+            coding_context=coding_context,
+            packages_explored=packages_explored or []
         )
         
         self.thoughts[thought_id] = thought
@@ -503,9 +873,66 @@ class SequentialThinkingEngine:
             "fallback_ratio": round(fallback_ratio, 2),
             "pattern_count": pattern_count
         }
+    
+    def _get_coding_patterns(self, thoughts: List[Thought]) -> Dict[str, int]:
+        """Helper to extract coding patterns from thoughts."""
+        patterns = {}
+        for thought in thoughts:
+            for pattern_result in thought.pattern_results:
+                if pattern_result.strategy == "coding_keyword":
+                    patterns[pattern_result.pattern] = patterns.get(pattern_result.pattern, 0) + 1
+        return patterns
+    
+    def _get_package_usage_stats(self, thoughts: List[Thought]) -> Dict[str, int]:
+        """Helper to get package usage statistics."""
+        package_mentions = {}
+        for thought in thoughts:
+            for package in thought.packages_explored:
+                package_mentions[package.name] = package_mentions.get(package.name, 0) + 1
+        return package_mentions
 
-mcp = FastMCP("Enhanced Sequential Thinking")
+# Cross-system integration interface
+class CrossSystemIntegration:
+    """Interface for integrating with memory-bank-mcp and other systems."""
+    
+    def __init__(self, thinking_engine: SequentialThinkingEngine):
+        self.thinking_engine = thinking_engine
+        self.shared_context = {}
+    
+    def get_package_context(self, session_id: str) -> Dict[str, Any]:
+        """Get package context for sharing with other systems."""
+        session = self.thinking_engine.session_manager.get_session(session_id)
+        if not session:
+            return {}
+        
+        return {
+            "packages": {name: asdict(pkg) for name, pkg in session.package_registry.items()},
+            "architecture_decisions": {id: asdict(dec) for id, dec in session.architecture_decisions.items()},
+            "coding_session": session.coding_session,
+            "last_updated": session.last_updated
+        }
+    
+    def set_external_package_context(self, session_id: str, external_context: Dict[str, Any]):
+        """Receive package context from external systems."""
+        session = self.thinking_engine.session_manager.get_session(session_id)
+        if not session:
+            return
+        
+        # Merge external package information
+        if "packages" in external_context:
+            for name, pkg_data in external_context["packages"].items():
+                if name not in session.package_registry:
+                    session.package_registry[name] = PackageInfo(**pkg_data)
+        
+        # Merge architecture decisions
+        if "architecture_decisions" in external_context:
+            for dec_id, dec_data in external_context["architecture_decisions"].items():
+                if dec_id not in session.architecture_decisions:
+                    session.architecture_decisions[dec_id] = ArchitectureDecision(**dec_data)
+
+mcp = FastMCP("Enhanced Sequential Thinking with Coding Integration")
 engine = SequentialThinkingEngine()
+cross_system = CrossSystemIntegration(engine)
 
 @mcp.tool()
 def start_thinking_session(problem: str, success_criteria: str, constraints: str = "", ctx: Context = None) -> str:
@@ -580,6 +1007,267 @@ def analyze_thinking(ctx: Context = None) -> str:
     except Exception as e:
         return f"Error analyzing thinking: {str(e)}"
 
+# New Coding Workflow MCP Tools
+
+@mcp.tool()
+def start_coding_session(
+    problem: str,
+    success_criteria: str,
+    constraints: str = "",
+    codebase_context: str = "",
+    package_exploration_required: bool = True,
+    ctx: Context = None
+) -> str:
+    """Start a specialized coding session with package discovery and architecture decision tracking."""
+    try:
+        constraint_list = [c.strip() for c in constraints.split(",") if c.strip()] if constraints else []
+        
+        session_id = engine.coding_workflow.start_coding_session(
+            problem=problem,
+            success_criteria=success_criteria,
+            constraints=constraint_list,
+            codebase_context=codebase_context,
+            package_exploration_required=package_exploration_required
+        )
+        
+        client_version = engine.compatibility_layer.detect_client_version(ctx)
+        response = f"Started coding session {session_id} for: {problem}"
+        
+        if package_exploration_required:
+            response += "\nPackage exploration enabled - will explore existing solutions first."
+        
+        return engine.compatibility_layer.adapt_response(response, client_version)
+    except Exception as e:
+        return f"Error starting coding session: {str(e)}"
+
+@mcp.tool()
+def explore_packages(
+    task_description: str,
+    language: str = "python",
+    thinking_session_id: str = "",
+    ctx: Context = None
+) -> str:
+    """Discover and explore existing packages for a given task before writing new code."""
+    try:
+        session_id = thinking_session_id or engine.current_session
+        if not session_id:
+            return "Error: No active session. Start a thinking session first."
+        
+        packages = engine.coding_workflow.explore_packages(
+            task_description=task_description,
+            language=language,
+            thinking_session_id=session_id
+        )
+        
+        if not packages:
+            return f"No relevant packages found for: {task_description}"
+        
+        result = f"Found {len(packages)} relevant packages for: {task_description}\n\n"
+        
+        for i, pkg in enumerate(packages[:5], 1):  # Show top 5
+            status = "✓ Installed" if pkg.installed else "◯ Available"
+            result += f"{i}. {pkg.name} ({pkg.version}) - {status}\n"
+            result += f"   Description: {pkg.description}\n"
+            result += f"   Relevance: {pkg.relevance_score:.2f}\n\n"
+        
+        client_version = engine.compatibility_layer.detect_client_version(ctx)
+        return engine.compatibility_layer.adapt_response(result, client_version)
+    except Exception as e:
+        return f"Error exploring packages: {str(e)}"
+
+@mcp.tool()
+def record_architecture_decision(
+    decision_title: str,
+    context: str,
+    options_considered: str,
+    chosen_option: str,
+    rationale: str,
+    consequences: str,
+    package_dependencies: str = "",
+    thinking_session_id: str = "",
+    ctx: Context = None
+) -> str:
+    """Record an architecture decision with rationale and consequences."""
+    try:
+        session_id = thinking_session_id or engine.current_session
+        if not session_id:
+            return "Error: No active session. Start a thinking session first."
+        
+        options_list = [opt.strip() for opt in options_considered.split(",") if opt.strip()]
+        deps_list = [dep.strip() for dep in package_dependencies.split(",") if dep.strip()] if package_dependencies else []
+        
+        decision_id = engine.coding_workflow.record_architecture_decision(
+            title=decision_title,
+            context=context,
+            options_considered=options_list,
+            chosen_option=chosen_option,
+            rationale=rationale,
+            consequences=consequences,
+            package_dependencies=deps_list,
+            thinking_session_id=session_id
+        )
+        
+        client_version = engine.compatibility_layer.detect_client_version(ctx)
+        response = f"Recorded architecture decision ADR-{decision_id}: {decision_title}"
+        return engine.compatibility_layer.adapt_response(response, client_version)
+    except Exception as e:
+        return f"Error recording architecture decision: {str(e)}"
+
+@mcp.tool()
+def detect_code_reinvention(
+    proposed_code: str,
+    existing_packages_checked: str = "",
+    confidence_threshold: float = 0.8,
+    ctx: Context = None
+) -> str:
+    """Detect if proposed code might be reinventing existing package functionality."""
+    try:
+        packages_checked = [pkg.strip() for pkg in existing_packages_checked.split(",") if pkg.strip()] if existing_packages_checked else []
+        
+        result = engine.coding_workflow.detect_code_reinvention(
+            proposed_code=proposed_code,
+            existing_packages_checked=packages_checked,
+            confidence_threshold=confidence_threshold
+        )
+        
+        response = f"Code Reinvention Analysis:\n"
+        response += f"Potential Reinvention: {'Yes' if result['is_potential_reinvention'] else 'No'}\n"
+        response += f"Confidence Score: {result['confidence_score']:.2f}\n"
+        response += f"Recommendation: {result['recommendation']}\n\n"
+        
+        if result['detected_patterns']:
+            response += "Detected Patterns:\n"
+            for pattern in result['detected_patterns']:
+                response += f"- {pattern['functionality']} (confidence: {pattern['confidence']:.2f})\n"
+                response += f"  Keywords: {', '.join(pattern['keywords_matched'])}\n"
+        
+        if result['packages_checked']:
+            response += f"\nPackages Checked: {', '.join(result['packages_checked'])}\n"
+        
+        client_version = engine.compatibility_layer.detect_client_version(ctx)
+        return engine.compatibility_layer.adapt_response(response, client_version)
+    except Exception as e:
+        return f"Error detecting code reinvention: {str(e)}"
+
+@mcp.tool()
+def query_architecture_decisions(
+    technology: str = "",
+    pattern: str = "",
+    package: str = "",
+    similarity_threshold: float = 0.7,
+    ctx: Context = None
+) -> str:
+    """Query previous architecture decisions for similar contexts."""
+    try:
+        decisions = engine.coding_workflow.architecture_tracker.query_similar_decisions(
+            technology=technology,
+            pattern=pattern,
+            package=package,
+            similarity_threshold=similarity_threshold
+        )
+        
+        if not decisions:
+            return "No similar architecture decisions found."
+        
+        response = f"Found {len(decisions)} similar architecture decisions:\n\n"
+        
+        for i, decision in enumerate(decisions, 1):
+            response += f"{i}. ADR-{decision.id}: {decision.title}\n"
+            response += f"   Context: {decision.context[:100]}...\n"
+            response += f"   Chosen: {decision.chosen_option}\n"
+            response += f"   Packages: {', '.join(decision.package_dependencies)}\n"
+            response += f"   Date: {decision.timestamp}\n\n"
+        
+        client_version = engine.compatibility_layer.detect_client_version(ctx)
+        return engine.compatibility_layer.adapt_response(response, client_version)
+    except Exception as e:
+        return f"Error querying architecture decisions: {str(e)}"
+
+@mcp.tool()
+async def add_coding_thought(
+    content: str,
+    dependencies: str = "",
+    confidence: float = 0.8,
+    branch_id: str = "",
+    explore_packages: bool = True,
+    ctx: Context = None
+) -> str:
+    """Add a thought with coding context and optional package exploration."""
+    try:
+        dep_list = [d.strip() for d in dependencies.split(",") if d.strip()] if dependencies else []
+        branch = branch_id if branch_id else None
+        
+        packages_explored = []
+        if explore_packages and engine.current_session:
+            # Quick package exploration based on thought content
+            packages_explored = engine.coding_workflow.explore_packages(
+                task_description=content,
+                thinking_session_id=engine.current_session
+            )
+        
+        thought_id = await engine.add_thought(
+            content=content,
+            dependencies=dep_list,
+            confidence=confidence,
+            branch_id=branch,
+            coding_context=True,
+            packages_explored=packages_explored
+        )
+        
+        thought = engine.thoughts[thought_id]
+        
+        result = f"Added coding thought {thought_id}: {content[:50]}..."
+        if thought.contradictions:
+            result += f" WARNING: Contradicts: {', '.join(thought.contradictions)}"
+        
+        # Show package suggestions if found
+        if packages_explored:
+            top_packages = packages_explored[:3]
+            result += f"\nPackage suggestions: {', '.join(pkg.name for pkg in top_packages)}"
+        
+        pattern_info = ""
+        high_conf_patterns = [pr for pr in thought.pattern_results if pr.confidence > 0.8]
+        if high_conf_patterns:
+            pattern_info = f" Patterns: {', '.join(pr.pattern for pr in high_conf_patterns)}"
+        
+        client_version = engine.compatibility_layer.detect_client_version(ctx)
+        return engine.compatibility_layer.adapt_response(result + pattern_info, client_version)
+    except Exception as e:
+        return f"Error adding coding thought: {str(e)}"
+
+# Additional MCP tools for cross-system integration
+@mcp.tool()
+def get_cross_system_context(session_id: str = "", ctx: Context = None) -> str:
+    """Get package and architecture context for sharing with other systems."""
+    try:
+        target_session = session_id or engine.current_session
+        if not target_session:
+            return "Error: No session specified and no active session"
+        
+        context = cross_system.get_package_context(target_session)
+        client_version = engine.compatibility_layer.detect_client_version(ctx)
+        response = json.dumps(context, indent=2)
+        return engine.compatibility_layer.adapt_response(response, client_version)
+    except Exception as e:
+        return f"Error getting cross-system context: {str(e)}"
+
+@mcp.tool()
+def set_external_context(external_context: str, session_id: str = "", ctx: Context = None) -> str:
+    """Set external package and architecture context from other systems."""
+    try:
+        target_session = session_id or engine.current_session
+        if not target_session:
+            return "Error: No session specified and no active session"
+        
+        context_data = json.loads(external_context)
+        cross_system.set_external_package_context(target_session, context_data)
+        
+        client_version = engine.compatibility_layer.detect_client_version(ctx)
+        response = f"Successfully integrated external context for session {target_session}"
+        return engine.compatibility_layer.adapt_response(response, client_version)
+    except Exception as e:
+        return f"Error setting external context: {str(e)}"
+
 @mcp.resource("thinking://tree")
 def get_thought_tree() -> str:
     try:
@@ -602,6 +1290,77 @@ def get_patterns() -> str:
         return json.dumps(engine.patterns, indent=2)
     except Exception as e:
         return f"Error getting patterns: {str(e)}"
+
+@mcp.resource("thinking://packages")
+def get_package_registry() -> str:
+    """Get the package registry for the current session."""
+    try:
+        if not engine.current_session:
+            return json.dumps({"error": "No active session"}, indent=2)
+        
+        session = engine.session_manager.get_session(engine.current_session)
+        if not session:
+            return json.dumps({"error": "Session not found"}, indent=2)
+        
+        package_data = {
+            "session_id": session.id,
+            "packages": {name: asdict(pkg) for name, pkg in session.package_registry.items()}
+        }
+        return json.dumps(package_data, indent=2)
+    except Exception as e:
+        return f"Error getting package registry: {str(e)}"
+
+@mcp.resource("thinking://architecture-decisions")
+def get_architecture_decisions() -> str:
+    """Get architecture decisions for the current session."""
+    try:
+        if not engine.current_session:
+            return json.dumps({"error": "No active session"}, indent=2)
+        
+        session = engine.session_manager.get_session(engine.current_session)
+        if not session:
+            return json.dumps({"error": "Session not found"}, indent=2)
+        
+        decisions_data = {
+            "session_id": session.id,
+            "decisions": {dec_id: asdict(dec) for dec_id, dec in session.architecture_decisions.items()}
+        }
+        return json.dumps(decisions_data, indent=2)
+    except Exception as e:
+        return f"Error getting architecture decisions: {str(e)}"
+
+@mcp.resource("thinking://coding-analysis")
+def get_coding_analysis() -> str:
+    """Get coding-specific analysis for the current session."""
+    try:
+        if not engine.current_session:
+            return json.dumps({"error": "No active session"}, indent=2)
+        
+        session = engine.session_manager.get_session(engine.current_session)
+        if not session:
+            return json.dumps({"error": "Session not found"}, indent=2)
+        
+        # Get all thoughts for analysis
+        all_thoughts = [engine.thoughts[tid] for tid in session.main_thread]
+        for branch in session.branches.values():
+            all_thoughts.extend([engine.thoughts[tid] for tid in branch.thoughts])
+        
+        coding_thoughts = [t for t in all_thoughts if t.coding_context]
+        
+        analysis = {
+            "session_id": session.id,
+            "is_coding_session": session.coding_session,
+            "total_thoughts": len(all_thoughts),
+            "coding_thoughts": len(coding_thoughts),
+            "packages_discovered": len(session.package_registry),
+            "architecture_decisions": len(session.architecture_decisions),
+            "coding_patterns": engine._get_coding_patterns(coding_thoughts),
+            "package_usage_stats": engine._get_package_usage_stats(coding_thoughts)
+        }
+        
+        return json.dumps(analysis, indent=2)
+    except Exception as e:
+        return f"Error getting coding analysis: {str(e)}"
 
 @mcp.prompt()
 def thinking_guide() -> str:

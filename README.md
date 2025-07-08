@@ -1,6 +1,6 @@
-# Sequential Thinking MCP
+# Sequential Thinking MCP with Coding Integration
 
-An advanced Model Context Protocol (MCP) server that enables structured sequential thinking with first principles reasoning, branch management, cognitive analysis, and enterprise-grade scalability.
+An advanced Model Context Protocol (MCP) server that enables structured sequential thinking with first principles reasoning, branch management, cognitive analysis, and enterprise-grade scalability. Now enhanced with comprehensive coding workflow integration to prevent code reinvention and accelerate development decisions.
 
 ## Features
 
@@ -11,6 +11,14 @@ An advanced Model Context Protocol (MCP) server that enables structured sequenti
 - **Pattern Recognition**: Learn from thinking patterns with multiple detection strategies
 - **Quality Analysis**: Assess thinking depth, structure, and effectiveness
 - **Resource Access**: Visual thought trees and analytics
+
+### 🆕 Coding Integration Features
+- **Package Discovery**: Automatic exploration of existing libraries before coding
+- **Architecture Decision Tracking**: Document and query technical decisions with full context
+- **Code Reinvention Prevention**: Detect when you're rebuilding existing functionality
+- **Cross-System Integration**: Share package context with memory-bank-mcp and other systems
+- **Real-time API Exploration**: Discover and evaluate packages with relevance scoring
+- **Coding Pattern Detection**: Identify coding-specific thought patterns and workflows
 
 ### Enterprise Architecture
 - **Plugin System**: Modular pattern detectors with protocol-based architecture
@@ -71,7 +79,9 @@ Add to your `claude_desktop_config.json`:
 
 ## Usage
 
-### 1. Start a Thinking Session
+### Basic Thinking (Unchanged)
+
+#### 1. Start a Thinking Session
 
 ```python
 start_thinking_session(
@@ -79,6 +89,61 @@ start_thinking_session(
     success_criteria="Scalable system with <100ms response time",
     constraints="Limited to open source tools, $1000 budget"
 )
+```
+
+### 🆕 Coding Integration Usage
+
+#### 1. Start a Coding Session (Enhanced)
+
+```python
+start_coding_session(
+    problem="Build REST API for user management",
+    success_criteria="Secure, scalable endpoints with automatic documentation",
+    constraints="Must integrate with existing Django app",
+    codebase_context="Django 4.2 project with PostgreSQL",
+    package_exploration_required=True  # Automatic package discovery
+)
+```
+
+#### 2. Explore Packages Before Coding
+
+```python
+# Discover relevant packages automatically
+packages = explore_packages("web framework async", "python")
+# Returns: FastAPI, Django, Flask with relevance scores and installation status
+
+# Get package suggestions in thoughts
+add_coding_thought(
+    "Need async web framework for high performance API",
+    explore_packages=True  # Automatically suggests relevant packages
+)
+```
+
+#### 3. Prevent Code Reinvention
+
+```python
+# Check if you're reinventing existing functionality
+result = detect_code_reinvention(
+    proposed_code="def custom_http_client(): # custom HTTP implementation",
+    existing_packages_checked="requests, httpx"
+)
+# Returns confidence score and alternative suggestions
+```
+
+#### 4. Track Architecture Decisions
+
+```python
+record_architecture_decision(
+    decision_title="Web Framework Selection", 
+    context="Need high-performance API with automatic documentation",
+    options_considered="FastAPI, Django REST, Flask-RESTful",
+    chosen_option="FastAPI",
+    rationale="Built-in OpenAPI docs, type hints, async support",
+    consequences="Newer ecosystem, learning curve for team"
+)
+
+# Query previous decisions for consistency
+similar_decisions = query_architecture_decisions(technology="web framework")
 ```
 
 ### 2. Add Sequential Thoughts
@@ -120,22 +185,43 @@ analyze_thinking()
 
 ## Available Tools
 
-| Tool | Description | New Features |
-|------|-------------|--------------|
-| `start_thinking_session` | Initialize a new thinking session with problem definition | Session isolation, memory management |
-| `add_thought` | Add a sequential thought with dependencies and confidence | Async processing, pattern confidence |
+### Core Thinking Tools (Enhanced)
+
+| Tool | Description | Enhanced Features |
+|------|-------------|------------------|
+| `start_thinking_session` | Initialize a new thinking session | Session isolation, memory management |
+| `add_thought` | Add a sequential thought with dependencies | Async processing, pattern confidence |
 | `revise_thought` | Update existing thoughts with new insights | Revision tracking, quality metrics |
 | `create_branch` | Start alternative reasoning paths | Branch isolation, concurrent processing |
 | `merge_branch` | Integrate branch insights into main thread | Conflict resolution, quality preservation |
 | `analyze_thinking` | Get quality metrics and patterns | Enhanced analytics, performance monitoring |
 
+### 🆕 Coding Integration Tools
+
+| Tool | Description | Key Benefits |
+|------|-------------|--------------|
+| `start_coding_session` | Initialize coding session with package discovery | Automatic package exploration, coding context |
+| `explore_packages` | Discover relevant packages for specific tasks | Real-time discovery, relevance scoring, installation status |
+| `add_coding_thought` | Add thoughts with package awareness | Automatic package suggestions, coding pattern detection |
+| `record_architecture_decision` | Document technical decisions with full context | Searchable decision history, rationale tracking |
+| `query_architecture_decisions` | Search previous decisions for consistency | Technology/pattern filtering, similarity matching |
+| `detect_code_reinvention` | Identify potential reinvention of existing code | Confidence scoring, alternative suggestions |
+| `get_cross_system_context` | Export package context for other systems | Memory-bank-mcp integration, context sharing |
+| `set_external_context` | Import package context from other systems | Cross-session learning, unified package knowledge |
+
 ## Resources
 
 Access structured data through MCP resources:
 
+### Core Resources
 - `thinking://tree` - Complete visual thought structure with confidence metrics
 - `thinking://analysis` - Quality metrics, performance data, and insights  
 - `thinking://patterns` - Learning from thinking patterns with strategy tracking
+
+### 🆕 Coding Integration Resources
+- `thinking://packages` - Package discovery registry with relevance scores
+- `thinking://architecture-decisions` - Architecture decision records (ADRs)
+- `thinking://coding-analysis` - Coding-specific metrics and insights
 
 ## Advanced Features
 
@@ -166,6 +252,7 @@ Comprehensive exception management throughout the system with detailed error rep
 
 ## Best Practices
 
+### Core Thinking Practices
 1. **Start with Problem Decomposition**: Break complex problems into smaller, manageable components
 2. **Build Logical Dependencies**: Connect thoughts to show how insights build upon each other  
 3. **Use High Confidence for Facts**: Reserve confidence scores above 0.8 for well-established facts
@@ -173,6 +260,15 @@ Comprehensive exception management throughout the system with detailed error rep
 5. **Monitor Resource Usage**: Use session limits to prevent memory issues with large thinking sessions
 6. **Revise When New Insights Emerge**: Update thoughts as understanding deepens
 7. **Analyze Before Concluding**: Use quality analysis to ensure thorough exploration
+
+### 🆕 Coding Integration Best Practices
+8. **Always Explore Packages First**: Use `explore_packages()` before implementing new functionality
+9. **Document Architecture Decisions**: Record technical choices with full context and rationale
+10. **Check for Code Reinvention**: Use `detect_code_reinvention()` regularly throughout development
+11. **Leverage Cross-Session Learning**: Query previous decisions for consistent technology choices
+12. **Use Specific Task Descriptions**: Better package discovery with detailed, specific descriptions
+13. **Maintain Decision History**: Keep architecture decisions up-to-date as context changes
+14. **Share Context Across Systems**: Integrate with memory-bank-mcp for unified package knowledge
 
 ## Example Workflow
 
@@ -268,6 +364,18 @@ class CustomPatternDetector:
 
 ## Changelog
 
+### v3.0.0 - Coding Integration Enhancement
+- ✅ Complete coding workflow integration
+- ✅ Package discovery and exploration engine
+- ✅ Architecture decision tracking (ADR) system
+- ✅ Code reinvention prevention detection
+- ✅ Cross-system integration with memory-bank-mcp
+- ✅ Real-time API exploration workflow
+- ✅ Coding pattern detection and analysis
+- ✅ Comprehensive documentation and testing
+- ✅ Migration guide for existing users
+- ✅ Full backward compatibility maintained
+
 ### v2.0.0 - Architecture Refactoring
 - ✅ Plugin system for modular pattern detection
 - ✅ Session isolation and concurrent processing
@@ -286,10 +394,29 @@ class CustomPatternDetector:
 
 MIT License - see LICENSE file for details
 
+## Documentation & Migration
+
+### 📚 Comprehensive Documentation
+- **[CODING_INTEGRATION.md](CODING_INTEGRATION.md)** - Complete coding workflow guide with examples
+- **[MIGRATION.md](MIGRATION.md)** - Step-by-step migration guide for existing users
+- **[tests/](tests/)** - Comprehensive test suite with integration examples
+
+### 🔄 For Existing Users
+**Zero Breaking Changes**: All existing tools work unchanged. New coding features are completely optional and additive.
+
+**Migration Path**: 
+1. Continue using existing thinking tools (no changes needed)
+2. Try `start_coding_session()` for coding problems  
+3. Gradually adopt package discovery and decision tracking
+4. Leverage cross-system integration as needed
+
+See [MIGRATION.md](MIGRATION.md) for detailed adoption strategies.
+
 ## Support
 
 For issues and questions:
 - Create an issue on GitHub
-- Check existing documentation
+- Check [CODING_INTEGRATION.md](CODING_INTEGRATION.md) for comprehensive usage guide
+- Review [MIGRATION.md](MIGRATION.md) for adoption strategies
 - Review architecture guidelines for contributions
 - Test with provided examples
